@@ -1,5 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/extensions/Xfixes.h>
 
@@ -33,9 +36,45 @@ static void select_events(Display *dpy, Window win){
     XFlush(dpy);
 }
 
+void usage (char **argv) {
+    printf("Usage: %s\n",argv[0]);
+    printf(" or  : %s --wrap command\n",argv[0]);
+    printf("\nWith %s installed in your $PATH, you can use the following under \"launch options\"\nin Steam:\n%s --wrap %%command%%\n","lotro_hide","lotro_hide");
+}
+
 int main(int argc, char **argv){
     int xi_opcode, event, error;
     XEvent ev;
+
+    if(argc > 0) {
+        if (strcmp(argv[1],"--wrap") == 0) {
+            if(argc < 3) {
+                printf("Error: --wrap needs at least one parameter\n\n");
+                usage(argv);
+                return 101;
+            }
+            pid_t systemChild = fork();
+            // 0 = this is the fork
+            if ( systemChild == 0)
+            {
+                // Exec our parameters
+                int ret = execvp(argv[2],&argv[2]);
+                printf("failed to exec() argument: %d\n",ret);
+                return 100;
+            }
+            pid_t lotrohide = fork();
+            if(lotrohide != 0) {
+                int status;
+                waitpid(systemChild,&status,0);
+                kill(lotrohide,SIGTERM);
+                return 0;
+            }
+        // Anything other than --wrap is treated as "show me the usage screen"
+        } else {
+            usage(argv);
+            return 0;
+        }
+    }
 
     dpy = XOpenDisplay(NULL);
     if (!dpy) {
